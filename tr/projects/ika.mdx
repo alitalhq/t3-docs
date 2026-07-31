@@ -1,6 +1,6 @@
 ---
-title: 'Bumin İKA'
-description: 'T3 Gemstone O1 ve ROS 2 ile geliştirilen açık kaynaklı insansız kara aracı'
+title: 'İKA'
+description: 'T3 Gemstone O1 ve ROS 2 ile modüler bir insansız kara aracı geliştirmek: Bumin İKA örneği ve genel yöntem'
 ---
 
 ## 1. Genel Bakış
@@ -104,7 +104,64 @@ kaldırılır. Adım adım komutlar ve parametre dosyaları için dokümantasyon
 [Çalıştırma](https://github.com/alitalhq/t3gemstone-bumin-ika-docs/blob/main/docs/tr/05-calistirma.md)
 sayfasına bakınız.
 
-## 7. Kaynak ve Dokümantasyon
+## 7. Kendi İKA'nızı Bu Yöntemle Oluşturmak
+
+Bumin İKA'nın asıl mimari fikri, her sensör/eyleyicinin aynı beş adımlık kalıpla eklenmesidir. Bu
+kalıbı takip ederek Gemstone üzerinde kendi modüler İKA'nızı oluşturabilirsiniz:
+
+<Steps>
+  <Step title="Donanımı bağlayın">
+    Sensör/eyleyiciyi GPIO'ya (veya I2C/SPI/UART gibi uygun bir arayüze) bağlayın. `gpiodetect` ve
+    `gpioinfo` ile boş bir chip/line bulun; [GPIO](/tr/boards/o1/peripherals/gpio) sayfasındaki
+    sistem tarafından ayrılmış pinlere (IMU'nun kullandığı SPI0 hatları gibi) dokunmayın.
+  </Step>
+  <Step title="Donanımı ham komutlarla doğrulayın">
+    Kod yazmadan önce donanımın gerçekten çalıştığını doğrulayın; bu, ileride bir sorun çıktığında
+    donanım mı yoksa kod mu hatalı ayrımını kolaylaştırır.
+
+    ```bash
+    gpioget <chip> <line>
+    gpioset <chip> <line>=1
+    gpiomon <chip> <line>
+    ```
+  </Step>
+  <Step title="Node yazın: saf mantığı donanımdan ayırın">
+    Üç dosyalık bir yapı önerilir: ROS'a ve donanıma hiç dokunmayan, `pytest` ile test edilebilir bir
+    `<sensor>_math.py`; gerçek `gpiod` çağrılarını içeren ve importu `try/except` ile korunan bir
+    `<sensor>_driver.py`; parametreleri okuyup topic yayınlayan bir `<sensor>_node.py`. Standart ROS
+    mesaj tiplerini (`sensor_msgs`, `geometry_msgs`, `nav_msgs`) kullanmak, `rqt`, Nav2 ve
+    `slam_toolbox` gibi hazır araçların ek bir remap olmadan çalışmasını sağlar.
+
+    ```python
+    try:
+        import gpiod
+    except ImportError:  # pragma: no cover - Linux/kart dışında
+        gpiod = None
+    ```
+  </Step>
+  <Step title="Parametre dosyası ekleyin">
+    GPIO chip/line gibi donanıma özgü değerleri koda gömmeyin; bir YAML dosyasında yer tutucu olarak
+    bırakın.
+
+    ```yaml
+    <sensor>_node:
+      ros__parameters:
+        gpio_chip: ''      # gpiodetect ile doldurulacak
+        <pin_adi>_line: -1 # gpioinfo ile doldurulacak
+    ```
+  </Step>
+  <Step title="Master launch dosyasına ekleyin ve çalıştırın">
+    Yeni node'u, varsayılanı `false` olan bir `enable_<sensor>` argümanıyla master launch dosyasına
+    ekleyin. Böylece her alt sistem bağımsız olarak açılıp kapanabilir; önce node'u tek başına, sonra
+    sistemin geri kalanıyla birlikte test edin.
+  </Step>
+</Steps>
+
+Her adım bağımsız olduğu için yeni bir sensör eklemek veya var olanı değiştirmek diğer node'ları
+etkilemez. Bu da hem Bumin İKA'yı hem de bu yöntemle geliştirilecek herhangi bir İKA'yı, tek bir
+Gemstone O1 kartı üzerinde kolayca genişletilebilir, modüler bir geliştirme ortamına dönüştürür.
+
+## 8. Kaynak ve Dokümantasyon
 
 <CardGroup cols={2}>
   <Card title="Kaynak Kod" icon="github" href="https://github.com/alihaydarsucu/t3gemstone-bumin-ika">
