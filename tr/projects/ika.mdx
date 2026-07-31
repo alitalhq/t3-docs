@@ -10,13 +10,11 @@ açık kaynaklı bir insansız kara aracı (İKA) örneğine dayanır. Klasik bi
 (ArduPilot, PX4 vb.) kullanmak yerine motor sürücü, enkoder, ultrasonik sensör ve kamera gibi tüm
 donanım doğrudan Gemstone'un GPIO ve çevre birimleri üzerinden ROS 2 node'larıyla sürülür.
 
-- **Kaynak kod**: [github.com/alihaydarsucu/t3gemstone-bumin-ika](https://github.com/alihaydarsucu/t3gemstone-bumin-ika)
-- **Kapsamlı dokümantasyon**: [github.com/alitalhq/t3gemstone-bumin-ika-docs](https://github.com/alitalhq/t3gemstone-bumin-ika-docs)
-
 Bu sayfa bu mimariye ve Gemstone kartıyla ilişkisine genel bir bakış sunar; kurulumdan çalıştırmaya
-kadar adım adım anlatılan tam rehber yukarıdaki dokümantasyon reposunda bulunur.
+kadar adım adım anlatılan tam rehber, sayfa sonundaki Yararlı Bağlantılar bölümünde verilen
+dokümantasyon reposunda bulunur.
 
-## 2. Neden Tek Kart, Ayrı Mikrodenetleyici Yok
+## 2. Neden Tek Kart, Ayrı Mikrodenetleyici Yok?
 
 Bu mimarinin temel kararı, tek bir kartın (Gemstone O1) tüm sensör ve eyleyici görevlerini
 üstlenmesidir. Ayrı bir mikrodenetleyici kart (Arduino, ESP32 vb.) kullanılmaz — motor sürücü bile,
@@ -161,19 +159,9 @@ Her adım bağımsız olduğu için yeni bir sensör eklemek veya var olanı de�
 etkilemez. Bu da bu yöntemle geliştirilecek herhangi bir İKA'yı, tek bir Gemstone O1 kartı üzerinde
 kolayca genişletilebilir, modüler bir geliştirme ortamına dönüştürür.
 
-## 8. Kaynak ve Dokümantasyon
+## 8. Yararlı Bağlantılar
 
-<CardGroup cols={2}>
-  <Card title="Kaynak Kod" icon="github" href="https://github.com/alihaydarsucu/t3gemstone-bumin-ika">
-    ROS 2 paketleri, launch dosyaları ve parametre şablonları
-  </Card>
-  <Card title="Tam Dokümantasyon" icon="book" href="https://github.com/alitalhq/t3gemstone-bumin-ika-docs">
-    Kurulum, GPIO pin haritası, çalıştırma ve bilinen sorunlar (TR/EN)
-  </Card>
-  <Card title="GPIO" icon="microchip" href="/tr/boards/o1/peripherals/gpio">
-    GPIO chip/line keşfi ve genel kullanım
-  </Card>
-  <Card title="IMU" icon="compass" href="/tr/boards/o1/peripherals/imu">
-    ICM-20948 dahili IMU arayüzü
-  </Card>
-</CardGroup>
+- [Kaynak Kod](https://github.com/alihaydarsucu/t3gemstone-bumin-ika) — ROS 2 paketleri, launch dosyaları ve parametre şablonları
+- [Kapsamlı Dokümantasyon](https://github.com/alitalhq/t3gemstone-bumin-ika-docs) — Kurulum, GPIO pin haritası, çalıştırma ve bilinen sorunlar (TR/EN)
+- [GPIO](/tr/boards/o1/peripherals/gpio) — GPIO chip/line keşfi ve genel kullanım
+- [IMU](/tr/boards/o1/peripherals/imu) — ICM-20948 dahili IMU arayüzü
