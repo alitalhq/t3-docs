@@ -1,26 +1,26 @@
 ---
 title: 'İKA'
-description: 'T3 Gemstone O1 ve ROS 2 ile modüler bir insansız kara aracı geliştirmek: Bumin İKA örneği ve genel yöntem'
+description: 'T3 Gemstone O1 ve ROS 2 ile modüler bir insansız kara aracı geliştirmek'
 ---
 
 ## 1. Genel Bakış
 
-Bumin İKA, T3 Gemstone O1 kartı üzerinde tamamen ROS 2 (Humble) ile geliştirilen açık kaynaklı bir
-insansız kara aracı (İKA) projesidir. Klasik bir otopilot yazılımı (ArduPilot, PX4 vb.) kullanmak
-yerine motor sürücü, enkoder, ultrasonik sensör ve kamera gibi tüm donanım doğrudan Gemstone'un GPIO
-ve çevre birimleri üzerinden ROS 2 node'larıyla sürülür.
+Bu sayfada anlatılan mimari, T3 Gemstone O1 kartı üzerinde tamamen ROS 2 (Humble) ile geliştirilen
+açık kaynaklı bir insansız kara aracı (İKA) örneğine dayanır. Klasik bir otopilot yazılımı
+(ArduPilot, PX4 vb.) kullanmak yerine motor sürücü, enkoder, ultrasonik sensör ve kamera gibi tüm
+donanım doğrudan Gemstone'un GPIO ve çevre birimleri üzerinden ROS 2 node'larıyla sürülür.
 
 - **Kaynak kod**: [github.com/alihaydarsucu/t3gemstone-bumin-ika](https://github.com/alihaydarsucu/t3gemstone-bumin-ika)
 - **Kapsamlı dokümantasyon**: [github.com/alitalhq/t3gemstone-bumin-ika-docs](https://github.com/alitalhq/t3gemstone-bumin-ika-docs)
 
-Bu sayfa projenin mimarisine ve Gemstone kartıyla ilişkisine genel bir bakış sunar; kurulumdan
-çalıştırmaya kadar adım adım anlatılan tam rehber yukarıdaki dokümantasyon reposunda bulunur.
+Bu sayfa bu mimariye ve Gemstone kartıyla ilişkisine genel bir bakış sunar; kurulumdan çalıştırmaya
+kadar adım adım anlatılan tam rehber yukarıdaki dokümantasyon reposunda bulunur.
 
 ## 2. Neden Tek Kart, Ayrı Mikrodenetleyici Yok
 
-Projenin temel mimari kararı, tek bir kartın (Gemstone O1) tüm sensör ve eyleyici görevlerini
+Bu mimarinin temel kararı, tek bir kartın (Gemstone O1) tüm sensör ve eyleyici görevlerini
 üstlenmesidir. Ayrı bir mikrodenetleyici kart (Arduino, ESP32 vb.) kullanılmaz — motor sürücü bile,
-Bumin motor+enkoder kartındaki mikrodenetleyicinin yerini alarak Gemstone'un kendi GPIO'larından
+motor+enkoder kartındaki mikrodenetleyicinin yerini alarak Gemstone'un kendi GPIO'larından
 çalışır. Bu yaklaşım, açılışın tek bir Linux ortamında gerçekleşmesini sağlayarak sistemi
 sadeleştirir ve her katmanın (`enable_imu`, `enable_motor_driver`, `enable_camera`,
 `enable_lidar_stack` gibi launch argümanlarıyla) bağımsız açılıp kapanabilmesi sayesinde kademeli
@@ -106,8 +106,8 @@ sayfasına bakınız.
 
 ## 7. Kendi İKA'nızı Bu Yöntemle Oluşturmak
 
-Bumin İKA'nın asıl mimari fikri, her sensör/eyleyicinin aynı beş adımlık kalıpla eklenmesidir. Bu
-kalıbı takip ederek Gemstone üzerinde kendi modüler İKA'nızı oluşturabilirsiniz:
+Bu mimarinin asıl fikri, her sensör/eyleyicinin aynı beş adımlık kalıpla eklenmesidir. Bu kalıbı
+takip ederek Gemstone üzerinde kendi modüler İKA'nızı oluşturabilirsiniz:
 
 <Steps>
   <Step title="Donanımı bağlayın">
@@ -158,8 +158,8 @@ kalıbı takip ederek Gemstone üzerinde kendi modüler İKA'nızı oluşturabil
 </Steps>
 
 Her adım bağımsız olduğu için yeni bir sensör eklemek veya var olanı değiştirmek diğer node'ları
-etkilemez. Bu da hem Bumin İKA'yı hem de bu yöntemle geliştirilecek herhangi bir İKA'yı, tek bir
-Gemstone O1 kartı üzerinde kolayca genişletilebilir, modüler bir geliştirme ortamına dönüştürür.
+etkilemez. Bu da bu yöntemle geliştirilecek herhangi bir İKA'yı, tek bir Gemstone O1 kartı üzerinde
+kolayca genişletilebilir, modüler bir geliştirme ortamına dönüştürür.
 
 ## 8. Kaynak ve Dokümantasyon
 
