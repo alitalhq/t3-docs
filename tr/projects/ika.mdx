@@ -31,7 +31,7 @@ saha testine imkân tanır.
 | IMU (ICM-20948) | SPI (`/dev/spidev0.3`) | Karta lehimli, dahili — ek kablo gerekmez |
 | Lidar (RPLIDAR A1M8) | USB | CP2102 USB-Seri çipi üzerinden |
 | Kamera | CSI0 / CSI1 | IMX219 / OV5640 gibi modülleri destekler |
-| Motor + Enkoder | GPIO (`libgpiod`) | Ayrı bir motor sürücü mikrodenetleyicisi yok |
+| Motor Sürücü (L298N) | GPIO yön + PWM hız (`libgpiod` + sysfs PWM) | Ayrı bir motor sürücü mikrodenetleyicisi yok; enkoder kullanılmıyor, hareket takibi IMU tabanlı |
 | Ultrasonik Sensörler | GPIO (`libgpiod`) | Trig/Echo çifti başına iki hat |
 
 Dahili IMU, SPI0 arayüzü üzerinden GPIO7, GPIO8, GPIO9, GPIO10 ve GPIO11 pinlerini kullanır; bu beş
@@ -50,12 +50,14 @@ Her donanım/görev kendi bağımsız ROS 2 paketinde yaşar; standart ROS mesaj
 | Paket | Görev |
 |---|---|
 | `gemstone_imu` | IMU sürücüsü, `imu/data_raw` yayını |
-| `gemstone_motor_driver` | GPIO üzerinden motor + enkoder kontrolü, `cmd_vel` dinler, `wheel_odom` yayınlar |
+| `gemstone_motor_driver` | GPIO+PWM üzerinden motor kontrolü (`cmd_vel` dinler), ve IMU tabanlı `motion_state_node` (`motion_state/odom` yayını) |
 | `gemstone_ultrasonic` | Ultrasonik mesafe sensörleri, `ultrasonicN/range` yayını |
 | `gemstone_camera` | Kamera sürücüsü, `camera/image_raw` yayını |
 | `gemstone_image_proc` | Görüntü işleme, `camera/image_processed` yayını |
 | `gemstone_lidar_bringup` | Lidar + `rf2o` odometri + SLAM/Nav2 entegrasyonu |
 | `gemstone_obstacle_avoidance` | Lidar verisine dayalı güvenlik/karar katmanı |
+| `gemstone_exploration_demo` | Lidar + `motion_state` tabanlı otonom keşif (durum makineli ve basit eşik tabanlı iki alternatif) |
+| `gemstone_sim` | Donanımsız Gazebo simülasyonu |
 | `gemstone_bringup` | URDF, parametre dosyaları ve tüm sistemi birleştiren master launch |
 
 ## 5. Sistem Mimarisi
@@ -66,30 +68,36 @@ flowchart TB
         IMU["IMU\n(SPI, dahili)"]
         LIDAR["RPLIDAR A1M8\n(USB)"]
         CAM["Kamera\n(CSI)"]
-        ENC["Enkoderler\n(GPIO)"]
         US["Ultrasonik\n(GPIO)"]
     end
 
     subgraph O1["T3 Gemstone O1 — ROS 2 Humble"]
         NODE_IMU[gemstone_imu]
         NODE_MOTOR[gemstone_motor_driver]
+        NODE_STATE[motion_state_node]
         NODE_LIDAR[gemstone_lidar_bringup]
         NODE_CAM[gemstone_camera / image_proc]
         NODE_AVOID[gemstone_obstacle_avoidance]
+        NODE_EXPLORE[gemstone_exploration_demo]
         SLAM[slam_toolbox / Nav2]
     end
 
+    MOTORS["L298N + Motorlar\n(GPIO yön + PWM hız)"]
+
     IMU --> NODE_IMU
+    IMU --> NODE_STATE
     LIDAR --> NODE_LIDAR
     CAM --> NODE_CAM
-    ENC --> NODE_MOTOR
     US --> NODE_MOTOR
 
     NODE_LIDAR --> SLAM
     NODE_LIDAR -->|"/scan"| NODE_AVOID
-    NODE_AVOID -->|"cmd_vel_nav"| NODE_MOTOR
+    NODE_LIDAR -->|"/scan"| NODE_EXPLORE
+    NODE_STATE -->|"/motion_state/odom"| NODE_EXPLORE
+    NODE_EXPLORE -->|"cmd_vel_nav"| NODE_AVOID
+    NODE_AVOID -->|"cmd_vel"| NODE_MOTOR
     SLAM -->|"cmd_vel"| NODE_MOTOR
-    NODE_MOTOR -->|"GPIO / libgpiod"| ENC
+    NODE_MOTOR -->|"GPIO + PWM"| MOTORS
 ```
 
 ## 6. Çalıştırma

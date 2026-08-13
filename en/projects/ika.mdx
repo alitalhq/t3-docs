@@ -31,7 +31,7 @@ enabled or disabled through launch arguments (`enable_imu`, `enable_motor_driver
 | IMU (ICM-20948) | SPI (`/dev/spidev0.3`) | Soldered onto the board, built-in — no extra wiring needed |
 | Lidar (RPLIDAR A1M8) | USB | Over the CP2102 USB-to-serial chip |
 | Camera | CSI0 / CSI1 | Supports modules such as IMX219 / OV5640 |
-| Motor + Encoder | GPIO (`libgpiod`) | No separate motor driver microcontroller |
+| Motor Driver (L298N) | GPIO direction + PWM speed (`libgpiod` + sysfs PWM) | No separate motor driver microcontroller; no encoder used, motion tracking is IMU-based |
 | Ultrasonic Sensors | GPIO (`libgpiod`) | Two lines per Trig/Echo pair |
 
 The built-in IMU uses GPIO7, GPIO8, GPIO9, GPIO10, and GPIO11 over the SPI0 interface; these five pins
@@ -49,12 +49,14 @@ message types (`sensor_msgs`, `geometry_msgs`, `nav_msgs`) are used, off-the-she
 | Package | Role |
 |---|---|
 | `gemstone_imu` | IMU driver, publishes `imu/data_raw` |
-| `gemstone_motor_driver` | Motor + encoder control over GPIO, listens to `cmd_vel`, publishes `wheel_odom` |
+| `gemstone_motor_driver` | Motor control over GPIO+PWM (listens to `cmd_vel`), plus IMU-based `motion_state_node` (publishes `motion_state/odom`) |
 | `gemstone_ultrasonic` | Ultrasonic distance sensors, publishes `ultrasonicN/range` |
 | `gemstone_camera` | Camera driver, publishes `camera/image_raw` |
 | `gemstone_image_proc` | Image processing, publishes `camera/image_processed` |
 | `gemstone_lidar_bringup` | Lidar + `rf2o` odometry + SLAM/Nav2 integration |
 | `gemstone_obstacle_avoidance` | Safety/decision layer based on lidar data |
+| `gemstone_exploration_demo` | Autonomous exploration based on lidar + `motion_state` (state-machine and simple threshold-based alternatives) |
+| `gemstone_sim` | Hardware-free Gazebo simulation |
 | `gemstone_bringup` | URDF, parameter files, and the master launch tying the whole system together |
 
 ## 5. System Architecture
@@ -65,30 +67,36 @@ flowchart TB
         IMU["IMU\n(SPI, built-in)"]
         LIDAR["RPLIDAR A1M8\n(USB)"]
         CAM["Camera\n(CSI)"]
-        ENC["Encoders\n(GPIO)"]
         US["Ultrasonic\n(GPIO)"]
     end
 
     subgraph O1["T3 Gemstone O1 — ROS 2 Humble"]
         NODE_IMU[gemstone_imu]
         NODE_MOTOR[gemstone_motor_driver]
+        NODE_STATE[motion_state_node]
         NODE_LIDAR[gemstone_lidar_bringup]
         NODE_CAM[gemstone_camera / image_proc]
         NODE_AVOID[gemstone_obstacle_avoidance]
+        NODE_EXPLORE[gemstone_exploration_demo]
         SLAM[slam_toolbox / Nav2]
     end
 
+    MOTORS["L298N + Motors\n(GPIO direction + PWM speed)"]
+
     IMU --> NODE_IMU
+    IMU --> NODE_STATE
     LIDAR --> NODE_LIDAR
     CAM --> NODE_CAM
-    ENC --> NODE_MOTOR
     US --> NODE_MOTOR
 
     NODE_LIDAR --> SLAM
     NODE_LIDAR -->|"/scan"| NODE_AVOID
-    NODE_AVOID -->|"cmd_vel_nav"| NODE_MOTOR
+    NODE_LIDAR -->|"/scan"| NODE_EXPLORE
+    NODE_STATE -->|"/motion_state/odom"| NODE_EXPLORE
+    NODE_EXPLORE -->|"cmd_vel_nav"| NODE_AVOID
+    NODE_AVOID -->|"cmd_vel"| NODE_MOTOR
     SLAM -->|"cmd_vel"| NODE_MOTOR
-    NODE_MOTOR -->|"GPIO / libgpiod"| ENC
+    NODE_MOTOR -->|"GPIO + PWM"| MOTORS
 ```
 
 ## 6. Running
