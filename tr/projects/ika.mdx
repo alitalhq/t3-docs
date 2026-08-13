@@ -5,43 +5,34 @@ description: 'Gemstone İnsansız Kara Aracı'
 
 ## 1. Genel Bakış
 
-Bu sayfada anlatılan mimari, T3 Gemstone O1 kartı üzerinde tamamen ROS 2 (Humble) ile geliştirilen
-açık kaynaklı bir insansız kara aracı (İKA) örneğine dayanır. Klasik bir otopilot yazılımı
-(ArduPilot, PX4 vb.) kullanmak yerine motor sürücü, enkoder, ultrasonik sensör ve kamera gibi tüm
-donanım doğrudan Gemstone'un GPIO ve çevre birimleri üzerinden ROS 2 node'larıyla sürülür.
+Bu proje, T3 Gemstone O1 kartının tek başına — ayrı bir mikrodenetleyici veya
+otopilot kartı olmadan — bir insansız kara aracını (İKA) baştan sona
+çalıştırabildiğini gösteren açık kaynaklı bir örnektir. Motor sürücü,
+ultrasonik sensör, kamera ve lidar gibi tüm donanım, Gemstone'un GPIO ve
+çevre birimleri üzerinden doğrudan ROS 2 (Humble) node'larıyla sürülüyor.
 
-Bu sayfa bu mimariye ve Gemstone kartıyla ilişkisine genel bir bakış sunar; kurulumdan çalıştırmaya
-kadar adım adım anlatılan tam rehber, sayfa sonundaki Yararlı Bağlantılar bölümünde verilen
-dokümantasyon reposunda bulunur.
+Bu sayfa hem mimariye genel bir bakış sunar hem de aynı projeyi baştan nasıl
+kuracağınızı adım adım anlatır. Tam kod ve kapsamlı dokümantasyon için sayfa
+sonundaki Yararlı Bağlantılar bölümüne bakabilirsiniz.
 
-## 2. Neden Tek Kart, Ayrı Mikrodenetleyici Yok?
-
-Bu mimarinin temel kararı, tek bir kartın (Gemstone O1) tüm sensör ve eyleyici görevlerini
-üstlenmesidir. Ayrı bir mikrodenetleyici kart (Arduino, ESP32 vb.) kullanılmaz — motor sürücü bile,
-motor+enkoder kartındaki mikrodenetleyicinin yerini alarak Gemstone'un kendi GPIO'larından
-çalışır. Bu yaklaşım, açılışın tek bir Linux ortamında gerçekleşmesini sağlayarak sistemi
-sadeleştirir ve her katmanın (`enable_imu`, `enable_motor_driver`, `enable_camera`,
-`enable_lidar_stack` gibi launch argümanlarıyla) bağımsız açılıp kapanabilmesi sayesinde kademeli
-saha testine imkân tanır.
-
-## 3. Donanım Bağlantıları
+## 2. Donanım Bağlantıları
 
 | Bileşen | Arayüz | Not |
 |---|---|---|
 | IMU (ICM-20948) | SPI (`/dev/spidev0.3`) | Karta lehimli, dahili — ek kablo gerekmez |
 | Lidar (RPLIDAR A1M8) | USB | CP2102 USB-Seri çipi üzerinden |
-| Kamera | CSI0 / CSI1 | IMX219 / OV5640 gibi modülleri destekler |
-| Motor Sürücü (L298N) | GPIO yön + PWM hız (`libgpiod` + sysfs PWM) | Ayrı bir motor sürücü mikrodenetleyicisi yok; enkoder kullanılmıyor, hareket takibi IMU tabanlı |
-| Ultrasonik Sensörler | GPIO (`libgpiod`) | Trig/Echo çifti başına iki hat |
+| Kamera (opsiyonel) | CSI0 / CSI1 | IMX219 / OV5640 gibi modülleri destekler |
+| Motor Sürücü | GPIO yön + PWM hız (`libgpiod` + sysfs PWM) | Örnekte L298N kullanıldı, başka bir sürücü de olur |
+| Ultrasonik Sensörler (opsiyonel) | GPIO (`libgpiod`) | Trig/Echo çifti başına iki hat |
 
 Dahili IMU, SPI0 arayüzü üzerinden GPIO7, GPIO8, GPIO9, GPIO10 ve GPIO11 pinlerini kullanır; bu beş
-pin motor, enkoder veya ultrasonik bağlantıları için kullanılmamalıdır. GPIO chip/line keşfi ve genel
+pin motor veya ultrasonik bağlantıları için kullanılmamalıdır. GPIO chip/line keşfi ve genel
 kullanım için [GPIO](/tr/boards/o1/peripherals/gpio) sayfasına, IMU hakkında daha fazla bilgi için
 [IMU](/tr/boards/o1/peripherals/imu) sayfasına bakabilirsiniz. Projeye özel tam pin haritası (line
-numaraları, fiziksel pin karşılıkları ve 40-pin header diyagramı) dokümantasyon reposunda ayrıntılı
-olarak yer alır.
+numaraları, fiziksel pin karşılıkları, PWM kanalları ve 40-pin header diyagramı) dokümantasyon
+reposunda ayrıntılı olarak yer alır.
 
-## 4. Yazılım Yığını
+## 3. Yazılım Mimarisi
 
 Her donanım/görev kendi bağımsız ROS 2 paketinde yaşar; standart ROS mesaj tipleri (`sensor_msgs`,
 `geometry_msgs`, `nav_msgs`) kullanıldığı için `teleop_twist_keyboard`, `rqt`, Nav2 ve
@@ -60,7 +51,7 @@ Her donanım/görev kendi bağımsız ROS 2 paketinde yaşar; standart ROS mesaj
 | `gemstone_sim` | Donanımsız Gazebo simülasyonu |
 | `gemstone_bringup` | URDF, parametre dosyaları ve tüm sistemi birleştiren master launch |
 
-## 5. Sistem Mimarisi
+## 4. Sistem Mimarisi
 
 ```mermaid
 flowchart TB
@@ -82,7 +73,7 @@ flowchart TB
         SLAM[slam_toolbox / Nav2]
     end
 
-    MOTORS["L298N + Motorlar\n(GPIO yön + PWM hız)"]
+    MOTORS["Motor Sürücü + Motorlar\n(GPIO yön + PWM hız)"]
 
     IMU --> NODE_IMU
     IMU --> NODE_STATE
@@ -100,74 +91,75 @@ flowchart TB
     NODE_MOTOR -->|"GPIO + PWM"| MOTORS
 ```
 
-## 6. Çalıştırma
+## 5. Bu Projeyi Kurmak
 
-Sistemi ilk seferde `bringup.launch.py` ile birden açmak yerine, her donanım kendi node'uyla önce
-tek başına test edilir (IMU → motor sürücü → ultrasonik → kamera → lidar → SLAM); bu sayede bir sorun
-çıktığında hangi katmandan kaynaklandığı hemen anlaşılır. Tüm katmanlar doğrulandıktan sonra sistem,
-her alt sistemi bir `enable_*` argümanıyla açıp kapatan tek bir master launch dosyasıyla ayağa
-kaldırılır. Adım adım komutlar ve parametre dosyaları için dokümantasyon reposundaki
-[Çalıştırma](https://github.com/alitalhq/t3gemstone-bumin-ika-docs/blob/main/docs/tr/05-calistirma.md)
-sayfasına bakınız.
-
-## 7. Kendi İKA'nızı Bu Yöntemle Oluşturmak
-
-Bu mimarinin asıl fikri, her sensör/eyleyicinin aynı beş adımlık kalıpla eklenmesidir. Bu kalıbı
-takip ederek Gemstone üzerinde kendi modüler İKA'nızı oluşturabilirsiniz:
+Aşağıdaki adımlar, bu projeyi kendi Gemstone O1 kartınızda baştan kurup
+çalıştırmanızı anlatır. Motor sürücüsü olarak burada **L298N** kullanılıyor;
+farklı bir sürücünüz varsa bağlantıları kendi sürücünüzün pin mantığına göre
+uyarlamanız yeterli.
 
 <Steps>
-  <Step title="Donanımı bağlayın">
-    Sensör/eyleyiciyi GPIO'ya (veya I2C/SPI/UART gibi uygun bir arayüze) bağlayın. `gpiodetect` ve
-    `gpioinfo` ile boş bir chip/line bulun; [GPIO](/tr/boards/o1/peripherals/gpio) sayfasındaki
-    sistem tarafından ayrılmış pinlere (IMU'nun kullandığı SPI0 hatları gibi) dokunmayın.
-  </Step>
-  <Step title="Donanımı ham komutlarla doğrulayın">
-    Kod yazmadan önce donanımın gerçekten çalıştığını doğrulayın; bu, ileride bir sorun çıktığında
-    donanım mı yoksa kod mu hatalı ayrımını kolaylaştırır.
+  <Step title="Yazılımı çekin">
+    Ana kod reposunu klonlayın:
 
     ```bash
-    gpioget <chip> <line>
-    gpioset <chip> <line>=1
-    gpiomon <chip> <line>
+    git clone https://github.com/alihaydarsucu/t3gemstone-bumin-ika.git
+    cd t3gemstone-bumin-ika
     ```
-  </Step>
-  <Step title="Node yazın: saf mantığı donanımdan ayırın">
-    Üç dosyalık bir yapı önerilir: ROS'a ve donanıma hiç dokunmayan, `pytest` ile test edilebilir bir
-    `<sensor>_math.py`; gerçek `gpiod` çağrılarını içeren ve importu `try/except` ile korunan bir
-    `<sensor>_driver.py`; parametreleri okuyup topic yayınlayan bir `<sensor>_node.py`. Standart ROS
-    mesaj tiplerini (`sensor_msgs`, `geometry_msgs`, `nav_msgs`) kullanmak, `rqt`, Nav2 ve
-    `slam_toolbox` gibi hazır araçların ek bir remap olmadan çalışmasını sağlar.
 
-    ```python
-    try:
-        import gpiod
-    except ImportError:  # pragma: no cover - Linux/kart dışında
-        gpiod = None
-    ```
+    T3 Gemstone O1'e imaj yazma ve ROS 2 Humble kurulumu için önce
+    [dokümantasyon reposundaki](https://github.com/alitalhq/t3gemstone-bumin-ika-docs)
+    kurulum sayfalarını takip edin.
   </Step>
-  <Step title="Parametre dosyası ekleyin">
-    GPIO chip/line gibi donanıma özgü değerleri koda gömmeyin; bir YAML dosyasında yer tutucu olarak
-    bırakın.
+  <Step title="Donanımı toplayın">
+    - T3 Gemstone O1
+    - 2x redüktörlü DC motor + tekerlek, 1x sarhoş/misket teker
+    - 1x motor sürücü (L298N ya da benzeri bir dual H-bridge modülü)
+    - 1x pil, 1x switch (pil hattını kesmek için)
+    - 1x RPLIDAR A1M8
+    - (opsiyonel) ultrasonik mesafe sensörü, CSI kamera modülü
 
-    ```yaml
-    <sensor>_node:
-      ros__parameters:
-        gpio_chip: ''      # gpiodetect ile doldurulacak
-        <pin_adi>_line: -1 # gpioinfo ile doldurulacak
-    ```
+    <img src="/images/ika/gemstone-o1.png" alt="T3 Gemstone O1 kartı" />
   </Step>
-  <Step title="Master launch dosyasına ekleyin ve çalıştırın">
-    Yeni node'u, varsayılanı `false` olan bir `enable_<sensor>` argümanıyla master launch dosyasına
-    ekleyin. Böylece her alt sistem bağımsız olarak açılıp kapanabilir; önce node'u tek başına, sonra
-    sistemin geri kalanıyla birlikte test edin.
+  <Step title="Bağlantıları yapın">
+    IMU karta lehimli geldiği için ek kablo gerekmez, lidar USB ile bağlanır.
+    Motor sürücüsünün (L298N) yön pinleri (IN1-4) ve PWM pinleri (ENA/ENB)
+    Gemstone'un GPIO'larına, güç girişi ise pil + switch üzerinden bağlanır.
+
+    <img src="/images/ika/ugv-bare-chassis.jpeg" alt="Boş şase" />
+    <img src="/images/ika/ugv-wiring-rear.jpeg" alt="Kablo bağlantıları" />
+    <img src="/images/ika/ugv-assembled-front.jpeg" alt="Tamamlanmış görünüm" />
+
+    Tam pin haritası (line numaraları, fiziksel pin karşılıkları, PWM
+    kanalları ve 40-pin header diyagramı) için dokümantasyon reposundaki
+    [Donanım Bağlantıları](https://github.com/alitalhq/t3gemstone-bumin-ika-docs/blob/main/docs/tr/04-donanim-baglantilari.md)
+    sayfasına bakın.
+  </Step>
+  <Step title="Derleyin ve çalıştırın">
+    ```bash
+    colcon build --symlink-install
+    source install/setup.bash
+    ```
+
+    Sistemi ilk seferde tek launch dosyasıyla birden açmak yerine, önce her
+    donanımı kendi node'uyla tek başına test etmenizi öneririz (IMU → motor
+    sürücü → lidar → ...); bu sayede bir sorun çıktığında hangi katmandan
+    kaynaklandığını hemen anlarsınız. Tüm katmanlar doğrulandıktan sonra:
+
+    ```bash
+    ros2 launch gemstone_bringup bringup.launch.py
+    ```
+
+    Adım adım komutlar, parametre dosyaları ve karşılaşabileceğiniz sorunlar
+    için dokümantasyon reposundaki
+    [Çalıştırma](https://github.com/alitalhq/t3gemstone-bumin-ika-docs/blob/main/docs/tr/05-calistirma.md)
+    ve
+    [Bilinen Sorunlar](https://github.com/alitalhq/t3gemstone-bumin-ika-docs/blob/main/docs/tr/09-bilinen-sorunlar-ve-cozumler.md)
+    sayfalarına bakın.
   </Step>
 </Steps>
 
-Her adım bağımsız olduğu için yeni bir sensör eklemek veya var olanı değiştirmek diğer node'ları
-etkilemez. Bu da bu yöntemle geliştirilecek herhangi bir İKA'yı, tek bir Gemstone O1 kartı üzerinde
-kolayca genişletilebilir, modüler bir geliştirme ortamına dönüştürür.
-
-## 8. Yararlı Bağlantılar
+## 6. Yararlı Bağlantılar
 
 - [Kaynak Kod](https://github.com/alihaydarsucu/t3gemstone-bumin-ika) — ROS 2 paketleri, launch dosyaları ve parametre şablonları
 - [Kapsamlı Dokümantasyon](https://github.com/alitalhq/t3gemstone-bumin-ika-docs) — Kurulum, GPIO pin haritası, çalıştırma ve bilinen sorunlar (TR/EN)
