@@ -22,7 +22,7 @@ sonundaki Yararlı Bağlantılar bölümüne bakabilirsiniz.
 | IMU (ICM-20948) | SPI (`/dev/spidev0.3`) | Karta lehimli, dahili — ek kablo gerekmez |
 | Lidar (RPLIDAR A1M8) | USB | CP2102 USB-Seri çipi üzerinden |
 | Kamera (opsiyonel) | CSI0 / CSI1 | IMX219 / OV5640 gibi modülleri destekler |
-| Motor Sürücü | GPIO yön + PWM hız (`libgpiod` + sysfs PWM) | Örnekte L298N kullanıldı, başka bir sürücü de olur |
+| Motor Sürücü | GPIO yön + PWM hız (`libgpiod` + sysfs PWM) | Örnekte L298N kullanıldı, başka bir sürücü de kullanılabilir |
 | Ultrasonik Sensörler (opsiyonel) | GPIO (`libgpiod`) | Trig/Echo çifti başına iki hat |
 
 Dahili IMU, SPI0 arayüzü üzerinden GPIO7, GPIO8, GPIO9, GPIO10 ve GPIO11 pinlerini kullanır; bu beş
