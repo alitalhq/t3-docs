@@ -166,3 +166,119 @@ uyarlamanız yeterli.
 - [Kapsamlı Dokümantasyon](https://github.com/alitalhq/t3gemstone-bumin-ika-docs) — Kurulum, GPIO pin haritası, çalıştırma ve bilinen sorunlar (TR/EN)
 - [GPIO](/tr/boards/o1/peripherals/gpio) — GPIO chip/line keşfi ve genel kullanım
 - [IMU](/tr/boards/o1/peripherals/imu) — ICM-20948 dahili IMU arayüzü
+
+---
+
+## 7. Otonom Haritalama
+
+İKA projesindeki donanım ve yazılım altyapısı kullanılarak, robotun
+insansız olarak bir ev ortamını keşfedip haritasını çıkarması
+sağlanabilir. Tüm otonom haritalama mevcut sensörlerle (lidar + IMU)
+yapılabilir, ek donanım gerekmez.
+
+### 7.1. Nasıl Çalışır?
+
+Sistem üç katmandan oluşur: algılama (SLAM + lidar), navigasyon (Nav2 +
+engelden kaçınma) ve keşif (frontier algoritması).
+
+```mermaid
+flowchart TB
+    subgraph PERCEPTION["Algılama"]
+        SLAM["slam_toolbox\n(Haritalama)"]
+        RF2O["rf2o\n(Odometri)"]
+        LIDAR["RPLIDAR A1M8\n(Lidar)"]
+    end
+
+    subgraph NAVIGATION["Navigasyon"]
+        NAV2["Nav2\n(Planlama + Kontrol)"]
+        AVOID["obstacle_avoidance\n(Güvenlik)"]
+    end
+
+    subgraph EXPLORATION["Keşif"]
+        FRONTIER["frontier_explorer\n(Keşif Algoritması)"]
+        GCS["GCS\n(Tarayıcı Arayüzü)"]
+    end
+
+    LIDAR -->|"/scan"| SLAM
+    LIDAR -->|"/scan"| RF2O
+    LIDAR -->|"/scan"| AVOID
+    SLAM -->|"/map"| FRONTIER
+    RF2O -->|"odom TF"| FRONTIER
+    FRONTIER -->|"NavigateToPose"| NAV2
+    NAV2 -->|"cmd_vel_nav"| AVOID
+    AVOID -->|"cmd_vel"| MOTOR["Motor Sürücü"]
+    GCS -->|"start/stop"| FRONTIER
+```
+
+Adım adım akış: lidar tarama yapar → harita oluşur → `frontier_explorer`
+bilinmeyen sınırları (frontier) tespit eder → en uygun frontier'a Nav2 ile
+hedef gönderilir → robot gider, harita güncellenir → tekrarlanır → kapsam
+%99'u aşınca otomatik durur.
+
+Algoritma, frontier'ları utility fonksiyonuyla puanlandırır: büyük
+frontier'lar tercih edilir, robota uzak olanlar cezalandırır, aynı
+hedefe tekrar tekrar gitme önlenir. Tespit periyodu, küme boyutu ve
+ağırlıklar `frontier_explorer.yaml` üzerinden ayarlanabilir (bölüm 7.3).
+
+### 7.2. Çalıştırma
+
+**Simülasyonda** (donanım gerekmez):
+
+```bash
+cd /ros_ws && source /opt/ros/humble/setup.bash
+colcon build --symlink-install \
+  --packages-select gemstone_sim gemstone_frontier_explorer \
+  gemstone_lidar_bringup gemstone_obstacle_avoidance
+source install/setup.bash
+
+ros2 launch gemstone_frontier_explorer auto_mapping.launch.py
+```
+
+Robot `house.world` içinde otomatik olarak dolaşmaya başlar. RViz ile
+görsel izleme için `enable_rviz:=true` ekleyin.
+
+<img src="/images/ika/gazebo-sim-screenshot.png" alt="Gazebo simülasyonunda otonom haritalama" />
+
+**Gerçek donanımda**: tek fark `use_sim_time:=false`:
+
+```bash
+ros2 launch gemstone_bringup bringup.launch.py \
+  enable_lidar_stack:=true enable_slam_toolbox:=true enable_nav2:=true
+
+ros2 launch gemstone_frontier_explorer auto_mapping.launch.py \
+  use_sim_time:=false
+```
+
+**Keşif kontrolü** ROS 2 servisleri ile yapılır:
+
+```bash
+ros2 service call /exploration/start std_srvs/srv/Trigger    # başlat
+ros2 service call /exploration/stop std_srvs/srv/Trigger     # durdur
+ros2 service call /exploration/save_map std_srvs/srv/Trigger # haritayı kaydet
+```
+
+**GCS ile tarayıcıdan izleme**:
+
+```bash
+ros2 launch gemstone_gcs gcs_bringup.launch.py
+```
+
+`http://localhost:8000` adresinde canlı harita, teleop ve keşif kontrolü
+tek ekranda görünür.
+
+<img src="/images/ika/gcs-screenshot.png" alt="GCS ekran görüntüsü" />
+
+### 7.3. Ayarlar
+
+Temel parametreler `gemstone_frontier_explorer/params/frontier_explorer.yaml`
+dosyasında yer alır:
+
+| Parametre | Varsayılan | Açıklama |
+|---|---|---|
+| `detect_period` | 1.0 sn | Tespit periyodu |
+| `cluster_min_cells` | 8 | Minimum frontier boyutu |
+| `w_size` | 1.0 | Boyut ağırlığı |
+| `w_dist` | 2.0 | Mesafe ağırlığı |
+| `commit_margin` | 0.05 m | Hedef değişimi önleme payı |
+| `coverage_threshold` | 0.99 | Otomatik bitiş eşiği |
+| `safety_distance` | 0.25 m | Güvenli mesafe |

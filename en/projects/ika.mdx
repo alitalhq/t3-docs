@@ -160,3 +160,118 @@ adapt the wiring to your driver's pin logic.
 - [Full Documentation](https://github.com/alitalhq/t3gemstone-bumin-ika-docs) — Setup, GPIO pin map, running, and known issues (TR/EN)
 - [GPIO](/en/boards/o1/peripherals/gpio) — GPIO chip/line discovery and general usage
 - [IMU](/en/boards/o1/peripherals/imu) — The built-in ICM-20948 IMU interface
+
+---
+
+## 7. Autonomous Mapping
+
+Using the hardware and software foundation from the UGV project, the
+robot can explore an indoor environment and build a map autonomously —
+no human intervention required. All autonomous mapping works with
+existing sensors (lidar + IMU), no extra hardware needed.
+
+### 7.1. How It Works
+
+The system consists of three layers: perception (SLAM + lidar),
+navigation (Nav2 + obstacle avoidance), and exploration (frontier
+algorithm).
+
+```mermaid
+flowchart TB
+    subgraph PERCEPTION["Perception"]
+        SLAM["slam_toolbox\n(Mapping)"]
+        RF2O["rf2o\n(Odometry)"]
+        LIDAR["RPLIDAR A1M8\n(Lidar)"]
+    end
+
+    subgraph NAVIGATION["Navigation"]
+        NAV2["Nav2\n(Planning + Control)"]
+        AVOID["obstacle_avoidance\n(Safety)"]
+    end
+
+    subgraph EXPLORATION["Exploration"]
+        FRONTIER["frontier_explorer\n(Exploration Algorithm)"]
+        GCS["GCS\n(Web Interface)"]
+    end
+
+    LIDAR -->|"/scan"| SLAM
+    LIDAR -->|"/scan"| RF2O
+    LIDAR -->|"/scan"| AVOID
+    SLAM -->|"/map"| FRONTIER
+    RF2O -->|"odom TF"| FRONTIER
+    FRONTIER -->|"NavigateToPose"| NAV2
+    NAV2 -->|"cmd_vel_nav"| AVOID
+    AVOID -->|"cmd_vel"| MOTOR["Motor Driver"]
+    GCS -->|"start/stop"| FRONTIER
+```
+
+Step-by-step: lidar scans → map forms → `frontier_explorer` detects
+unknown boundaries → best frontier is sent to Nav2 as a goal → robot
+navigates, map updates → cycle repeats → auto-stops at 99% coverage.
+
+The algorithm scores frontiers with a utility function: large frontiers
+are preferred, distant ones penalized, and repeated goals on the same
+spot prevented. Detection interval, cluster size, and weights are
+configurable via `frontier_explorer.yaml` (section 7.3).
+
+### 7.2. Running
+
+**In simulation** (no hardware needed):
+
+```bash
+cd /ros_ws && source /opt/ros/humble/setup.bash
+colcon build --symlink-install \
+  --packages-select gemstone_sim gemstone_frontier_explorer \
+  gemstone_lidar_bringup gemstone_obstacle_avoidance
+source install/setup.bash
+
+ros2 launch gemstone_frontier_explorer auto_mapping.launch.py
+```
+
+The robot starts exploring `house.world` autonomously. Add
+`enable_rviz:=true` for visual tracking.
+
+<img src="/images/ika/gazebo-sim-screenshot.png" alt="Autonomous mapping in Gazebo simulation" />
+
+**On real hardware**: the only difference is `use_sim_time:=false`:
+
+```bash
+ros2 launch gemstone_bringup bringup.launch.py \
+  enable_lidar_stack:=true enable_slam_toolbox:=true enable_nav2:=true
+
+ros2 launch gemstone_frontier_explorer auto_mapping.launch.py \
+  use_sim_time:=false
+```
+
+**Exploration control** via ROS 2 services:
+
+```bash
+ros2 service call /exploration/start std_srvs/srv/Trigger    # start
+ros2 service call /exploration/stop std_srvs/srv/Trigger     # stop
+ros2 service call /exploration/save_map std_srvs/srv/Trigger # save map
+```
+
+**Monitor with GCS**:
+
+```bash
+ros2 launch gemstone_gcs gcs_bringup.launch.py
+```
+
+Live map, teleop, and exploration controls appear on a single screen
+at `http://localhost:8000`.
+
+<img src="/images/ika/gcs-screenshot.png" alt="GCS screenshot" />
+
+### 7.3. Configuration
+
+Core parameters are in `gemstone_frontier_explorer/params/frontier_explorer.yaml`:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `detect_period` | 1.0 s | Detection interval |
+| `cluster_min_cells` | 8 | Minimum frontier size |
+| `w_size` | 1.0 | Size weight |
+| `w_dist` | 2.0 | Distance weight |
+| `commit_margin` | 0.05 m | Goal change prevention margin |
+| `coverage_threshold` | 0.99 | Auto-termination threshold |
+| `safety_distance` | 0.25 m | Safety distance |
